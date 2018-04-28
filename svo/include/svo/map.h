@@ -29,6 +29,7 @@ class Feature;
 class Seed;
 
 /// Container for converged 3D points that are not already assigned to two keyframes.
+//// candidate 是候选人的意思
 class MapPointCandidates
 {
 public:

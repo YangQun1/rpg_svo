@@ -105,7 +105,7 @@ protected:
       const UpdateResult dropout,
       const size_t num_observations);
 
-  /// Reset the map and frame handler to start from scratch.
+  /// Reset the map and frame handler to start from scratch. 	// 从头开始
   void resetCommon();
 
   /// Reset the frame handler. Implement in derived class.

@@ -34,6 +34,8 @@
 #include <vikit/camera_loader.h>
 #include <vikit/user_input_thread.h>
 
+#include <opencv2/highgui/highgui.hpp>
+
 namespace svo {
 
 /// SVO Interface
@@ -69,12 +71,24 @@ VoNode::VoNode() :
     user_input_thread_ = boost::make_shared<vk::UserInputThread>();
 
   // Create Camera
-  if(!vk::camera_loader::loadFromRosNs("svo", cam_))
+  // 这里的"svo"是ros的命名空间,而不是指文件目录.对应的是test_rig3.launch文件中的name=svo.
+  // 如果不是通过.launch文件启动本程序,则ros server中就没有svo的命名空间,因此就找不到cam_module参数
+  if(!vk::camera_loader::loadFromRosNs("svo", cam_))	
     throw std::runtime_error("Camera model not correctly specified.");
 
   // Get initial position and orientation
+  /*	// 原始代码中的相机初始位姿
   visualizer_.T_world_from_vision_ = Sophus::SE3(
       vk::rpy2dcm(Vector3d(vk::getParam<double>("svo/init_rx", 0.0),
+                           vk::getParam<double>("svo/init_ry", 0.0),
+                           vk::getParam<double>("svo/init_rz", 0.0))),
+      Eigen::Vector3d(vk::getParam<double>("svo/init_tx", 0.0),
+                      vk::getParam<double>("svo/init_ty", 0.0),
+                      vk::getParam<double>("svo/init_tz", 0.0)));
+     */
+  // 根据.launch文件自己修改的初始位姿
+   visualizer_.T_world_from_vision_ = Sophus::SE3(
+      vk::rpy2dcm(Vector3d(vk::getParam<double>("svo/init_rx", 3.14),
                            vk::getParam<double>("svo/init_ry", 0.0),
                            vk::getParam<double>("svo/init_rz", 0.0))),
       Eigen::Vector3d(vk::getParam<double>("svo/init_tx", 0.0),
@@ -94,16 +108,24 @@ VoNode::~VoNode()
     user_input_thread_->stop();
 }
 
+// imageCallback function
 void VoNode::imgCb(const sensor_msgs::ImageConstPtr& msg)
 {
   cv::Mat img;
+  
   try {
-    img = cv_bridge::toCvShare(msg, "mono8")->image;
+    // img = cv_bridge::toCvShare(msg, "mono8")->image;
+	img = cv_bridge::toCvShare(msg, "mono8")->image;
   } catch (cv_bridge::Exception& e) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
   }
+  
   processUserActions();
-  vo_->addImage(img, msg->header.stamp.toSec());
+  
+  double time_stamp = msg->header.stamp.toSec();
+  vo_->addImage(img, time_stamp);
+  // vo_->addImage(img, msg->header.stamp.toSec());
+  
   visualizer_.publishMinimal(img, vo_->lastFrame(), *vo_, msg->header.stamp.toSec());
 
   if(publish_markers_ && vo_->stage() != FrameHandlerBase::STAGE_PAUSED)
@@ -154,12 +176,22 @@ void VoNode::remoteKeyCb(const std_msgs::StringConstPtr& key_input)
 } // namespace svo
 
 int main(int argc, char **argv)
-{
+{  
   ros::init(argc, argv, "svo");
   ros::NodeHandle nh;
   std::cout << "create vo_node" << std::endl;
+  
+  // 	// debug
+{
+  cv::Mat imgFromPicture;
+  imgFromPicture = cv::imread("/home/yangqun/SLAM/DataSet/sin2_tex2_h1_v8_d/img/frame_000002_0.png");
+  cv::namedWindow("img1");
+  cv::imshow("img1", imgFromPicture);
+  cv::waitKey(0);
+}
+  
   svo::VoNode vo_node;
-
+ 
   // subscribe to cam msgs
   std::string cam_topic(vk::getParam<std::string>("svo/cam_topic", "camera/image_raw"));
   image_transport::ImageTransport it(nh);

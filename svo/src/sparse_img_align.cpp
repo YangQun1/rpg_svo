@@ -34,6 +34,7 @@ SparseImgAlign::SparseImgAlign(
         min_level_(min_level)
 {
   n_iter_ = n_iter;
+  
   n_iter_init_ = n_iter_;
   method_ = method;
   verbose_ = verbose;
@@ -65,7 +66,7 @@ size_t SparseImgAlign::run(FramePtr ref_frame, FramePtr cur_frame)
     have_ref_patch_cache_ = false;
     if(verbose_)
       printf("\nPYRAMID LEVEL %i\n---------------\n", level_);
-    optimize(T_cur_from_ref);
+    optimize(T_cur_from_ref);		// 这函数的实现在哪里?
   }
   cur_frame_->T_f_w_ = T_cur_from_ref * ref_frame_->T_f_w_;
 
@@ -84,8 +85,10 @@ Matrix<double, 6, 6> SparseImgAlign::getFisherInformation()
 void SparseImgAlign::precomputeReferencePatches()
 {
   const int border = patch_halfsize_+1;
+  // 第level层金字塔的图像
   const cv::Mat& ref_img = ref_frame_->img_pyr_.at(level_);
   const int stride = ref_img.cols;
+  // 第level层金字塔相对于原图像的缩放比例,1/2,1/4,1/8...
   const float scale = 1.0f/(1<<level_);
   const Vector3d ref_pos = ref_frame_->pos();
   const double focal_length = ref_frame_->cam_->errorMultiplier2();
@@ -95,26 +98,26 @@ void SparseImgAlign::precomputeReferencePatches()
       it!=ite; ++it, ++feature_counter, ++visiblity_it)
   {
     // check if reference with patch size is within image
-    const float u_ref = (*it)->px[0]*scale;
+    const float u_ref = (*it)->px[0]*scale;	// 计算原图像(第0层金字塔)中的特征点在当前层金字塔图像中的像素坐标(因为有缩放因子scale,所以有可能是小数)
     const float v_ref = (*it)->px[1]*scale;
-    const int u_ref_i = floorf(u_ref);
+    const int u_ref_i = floorf(u_ref);	// 取整
     const int v_ref_i = floorf(v_ref);
-    if((*it)->point == NULL || u_ref_i-border < 0 || v_ref_i-border < 0 || u_ref_i+border >= ref_img.cols || v_ref_i+border >= ref_img.rows)
+    if((*it)->point == NULL || u_ref_i-border < 0 || v_ref_i-border < 0 || u_ref_i+border >= ref_img.cols || v_ref_i+border >= ref_img.rows)	// 判断是否在图像中
       continue;
     *visiblity_it = true;
 
     // cannot just take the 3d points coordinate because of the reprojection errors in the reference image!!!
-    const double depth(((*it)->point->pos_ - ref_pos).norm());
-    const Vector3d xyz_ref((*it)->f*depth);
+    const double depth(((*it)->point->pos_ - ref_pos).norm());	// 求目标点在参考帧中的深度
+    const Vector3d xyz_ref((*it)->f*depth);					// 求目标点在参考帧中的坐标(相机坐标系,或叫帧坐标系)
 
     // evaluate projection jacobian
     Matrix<double,2,6> frame_jac;
-    Frame::jacobian_xyz2uv(xyz_ref, frame_jac);
+    Frame::jacobian_xyz2uv(xyz_ref, frame_jac);		// 求当前3D点的投影方程关于相机位姿的雅克比
 
     // compute bilateral interpolation weights for reference image
     const float subpix_u_ref = u_ref-u_ref_i;
     const float subpix_v_ref = v_ref-v_ref_i;
-    const float w_ref_tl = (1.0-subpix_u_ref) * (1.0-subpix_v_ref);
+    const float w_ref_tl = (1.0-subpix_u_ref) * (1.0-subpix_v_ref);	// 计算双线性插值的四个系数
     const float w_ref_tr = subpix_u_ref * (1.0-subpix_v_ref);
     const float w_ref_bl = (1.0-subpix_u_ref) * subpix_v_ref;
     const float w_ref_br = subpix_u_ref * subpix_v_ref;
@@ -214,6 +217,7 @@ double SparseImgAlign::computeResiduals(
           errors.push_back(fabsf(res));
 
         // robustification
+	// 此处,未使用权重,weight=1
         float weight = 1.0;
         if(use_weights_) {
           weight = weight_function_->value(res/scale_);

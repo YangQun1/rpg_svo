@@ -58,6 +58,7 @@ void Frame::initFrame(const cv::Mat& img)
   frame_utils::createImgPyramid(img, max(Config::nPyrLevels(), Config::kltMaxLevel()+1), img_pyr_);
 }
 
+// 将当前Frame设置为KeyFrame
 void Frame::setKeyframe()
 {
   is_keyframe_ = true;
@@ -69,6 +70,11 @@ void Frame::addFeature(Feature* ftr)
   fts_.push_back(ftr);
 }
 
+// 从当前Frame的所有feature points中选取五个,作为keypoints
+// 选取原则:
+//	将图像中心作为坐标原点,先选取距离原点最近的一个点,
+// 	然后依次在第四/三/二/一象限中选取距离远点最远的点,
+//	组成五个keypoints
 void Frame::setKeyPoints()
 {
   for(size_t i = 0; i < 5; ++i)
@@ -79,6 +85,8 @@ void Frame::setKeyPoints()
   std::for_each(fts_.begin(), fts_.end(), [&](Feature* ftr){ if(ftr->point != NULL) checkKeyPoints(ftr); });
 }
 
+// 检查输入的ftr是否满足keypoints的条件(距离中心最近,或者在图像四个象限中距离中心最远),
+// 如果满足条件,则将其作为keypoints
 void Frame::checkKeyPoints(Feature* ftr)
 {
   const int cu = cam_->width()/2;

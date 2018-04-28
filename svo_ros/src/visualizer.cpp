@@ -61,6 +61,7 @@ Visualizer() :
   pub_images_ = it.advertise("image", 10);
 }
 
+// 发布一些vo的处理结果
 void Visualizer::publishMinimal(
     const cv::Mat& img,
     const FramePtr& frame,
@@ -91,6 +92,7 @@ void Visualizer::publishMinimal(
     pub_info_.publish(msg_info);
   }
 
+  // 发布图像话题,用于在可视化软件中显示,当且仅当slam不运行时
   if(frame == NULL)
   {
     if(pub_images_.getNumSubscribers() > 0 && slam.stage() == FrameHandlerBase::STAGE_PAUSED)
@@ -113,6 +115,7 @@ void Visualizer::publishMinimal(
     cv::Mat img_rgb(frame->img_pyr_[img_pub_level_].size(), CV_8UC3);
     cv::cvtColor(frame->img_pyr_[img_pub_level_], img_rgb, CV_GRAY2RGB);
 
+    // 对于第二帧,画出其中的特征点相对于第一帧的对应关系(连线)
     if(slam.stage() == FrameHandlerBase::STAGE_SECOND_FRAME)
     {
       // During initialization, draw lines.
@@ -124,45 +127,49 @@ void Visualizer::publishMinimal(
                  cv::Point2f(it_cur->x/scale, it_cur->y/scale),
                  cv::Point2f(it_ref->x/scale, it_ref->y/scale), cv::Scalar(0,255,0), 2);
     }
-
+    // 对于其他帧,标出提取到的特征
+    //// 如果发送的图像是金字塔的第一层
     if(img_pub_level_ == 0)
     {
       for(Features::iterator it=frame->fts_.begin(); it!=frame->fts_.end(); ++it)
       {
+	      // 小边(edgelet)特征,用线标记
         if((*it)->type == Feature::EDGELET)
           cv::line(img_rgb,
                    cv::Point2f((*it)->px[0]+3*(*it)->grad[1], (*it)->px[1]-3*(*it)->grad[0]),
                    cv::Point2f((*it)->px[0]-3*(*it)->grad[1], (*it)->px[1]+3*(*it)->grad[0]),
                    cv::Scalar(255,0,255), 2);
-        else//point size 5x5
+        else//point size 5x5 // 否则,用5x5的矩形标记
           cv::rectangle(img_rgb,
                         cv::Point2f((*it)->px[0]-2, (*it)->px[1]-2),
                         cv::Point2f((*it)->px[0]+2, (*it)->px[1]+2),
                         cv::Scalar(0,255,0), CV_FILLED);
       }
     }
+    // 金字塔的第二层,特征用3x3的矩形表示
     else if(img_pub_level_ == 1){//point size 3x3
       for(Features::iterator it=frame->fts_.begin(); it!=frame->fts_.end(); ++it)
         cv::rectangle(img_rgb,
                       cv::Point2f((*it)->px[0]/scale-1, (*it)->px[1]/scale-1),
                       cv::Point2f((*it)->px[0]/scale+1, (*it)->px[1]/scale+1),
                       cv::Scalar(0,255,0), CV_FILLED);
-    }else{ //point size 1x1
+    }else{ //point size 1x1	// 把特征点标红
       for(Features::iterator it=frame->fts_.begin(); it!=frame->fts_.end(); ++it){
 	cv::Vec3b &p=  img_rgb.at<cv::Vec3b>((*it)->px[1]/scale, (*it)->px[0]/scale);
 	p[0]=0;p[1]=255;p[2]=0;
       }
     }
+    // 通过ROS的话题发送出去
     cv_bridge::CvImage img_msg;
     img_msg.header = header_msg;
     img_msg.image = img_rgb;
     img_msg.encoding = sensor_msgs::image_encodings::BGR8;
     pub_images_.publish(img_msg.toImageMsg());
   }
-
+////////////////////////////////////发送pose消息////////////////////////////////////////////
   if(pub_pose_.getNumSubscribers() > 0 && slam.stage() == FrameHandlerBase::STAGE_DEFAULT_FRAME)
   {
-    Quaterniond q;
+    Quaterniond q;		// 四元数
     Vector3d p;
     Matrix<double,6,6> Cov;
     if(publish_world_in_cam_frame_)
@@ -196,6 +203,8 @@ void Visualizer::publishMinimal(
   }
 }
 
+
+//
 void Visualizer::visualizeMarkers(
     const FramePtr& frame,
     const set<FramePtr>& core_kfs,

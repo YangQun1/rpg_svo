@@ -30,6 +30,8 @@
 #include <iostream>
 #include "test_utils.h"
 
+#include <opencv2/highgui.hpp>
+
 namespace svo {
 
 class BenchmarkNode
@@ -67,6 +69,12 @@ void BenchmarkNode::runFromFolder()
     if(img_id == 2)
       std::cout << "reading image " << ss.str() << std::endl;
     cv::Mat img(cv::imread(ss.str().c_str(), 0));
+    
+    // used for debug
+//     cv::namedWindow("img1");
+//     cv::imshow("img1", img);
+//     cv::waitKey(0);
+    
     assert(!img.empty());
 
     // process frame

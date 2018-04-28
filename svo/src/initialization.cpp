@@ -42,17 +42,20 @@ InitResult KltHomographyInit::addFirstFrame(FramePtr frame_ref)
 
 InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
 {
+	// 使用LK光流追踪特征点
   trackKlt(frame_ref_, frame_cur, px_ref_, px_cur_, f_ref_, f_cur_, disparities_);
   SVO_INFO_STREAM("Init: KLT tracked "<< disparities_.size() <<" features");
 
   if(disparities_.size() < Config::initMinTracked())
     return FAILURE;
 
+  //视差太小,说明两帧之间的相机移动太小,不能将第二帧作为关键帧keyframe
   double disparity = vk::getMedian(disparities_);
   SVO_INFO_STREAM("Init: KLT "<<disparity<<"px average disparity.");
   if(disparity < Config::initMinDisparity())
     return NO_KEYFRAME;
 
+  // 计算两帧之间的变换关系,并通过三角化得到路标点在当前帧下的3D坐标
   computeHomography(
       f_ref_, f_cur_,
       frame_ref_->cam_->errorMultiplier2(), Config::poseOptimThresh(),
@@ -124,6 +127,8 @@ void detectFeatures(
   });
 }
 
+// 使用L-K光流寻找frame_ref中的关键点px_ref在当前帧frame_cur中的位置(像素坐标)px_cur,并将没有找到
+// 对应点的关键点删除,得到对应的关键点之间的视差disparity
 void trackKlt(
     FramePtr frame_ref,
     FramePtr frame_cur,
@@ -138,7 +143,7 @@ void trackKlt(
   const double klt_eps = 0.001;
   vector<uchar> status;
   vector<float> error;
-  vector<float> min_eig_vec;
+  vector<float> min_eig_vec;	// 未用到的局部变量
   cv::TermCriteria termcrit(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, klt_max_iter, klt_eps);
   cv::calcOpticalFlowPyrLK(frame_ref->img_pyr_[0], frame_cur->img_pyr_[0],
                            px_ref, px_cur,
@@ -168,6 +173,10 @@ void trackKlt(
   }
 }
 
+// 计算单应的变换矩阵,找到内点,并得到内点在当前帧相机坐标系中的坐标
+// (通过变换关系和特征点对应关系进行三角化,求得3D坐标,并将不满足变换关系的点视作外点outlier)
+// @param in: f_ref, f_cur, focal_length, reprojection_threshold
+// @param out: inliers, xyz_in_cur, T_cur_from_ref
 void computeHomography(
     const vector<Vector3d>& f_ref,
     const vector<Vector3d>& f_cur,
